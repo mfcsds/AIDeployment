@@ -26,6 +26,19 @@ const COLORS = [
   "#3b82f6", "#8b5cf6", "#ec4899", "#f43f5e", "#06b6d4"
 ]
 
+type EndpointType = "huggingface" | "sagemaker"
+
+const ENDPOINTS = {
+  huggingface: {
+    name: "Hugging Face Spaces",
+    url: "https://mfathur19-yolo-app.hf.space/detect",
+  },
+  sagemaker: {
+    name: "AWS SageMaker",
+    url: "https://z689hxvntj.execute-api.ap-southeast-3.amazonaws.com/production/ai-prediction",
+  },
+}
+
 export default function ObjectDetectionPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
@@ -34,6 +47,7 @@ export default function ObjectDetectionPage() {
   const [error, setError] = useState<string | null>(null)
   const [confidence, setConfidence] = useState(25)
   const [imageSize, setImageSize] = useState({ width: 0, height: 0 })
+  const [endpoint, setEndpoint] = useState<EndpointType>("huggingface")
   const fileInputRef = useRef<HTMLInputElement>(null)
   const imageRef = useRef<HTMLImageElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -75,13 +89,34 @@ export default function ObjectDetectionPage() {
     setResult(null)
 
     try {
-      const formData = new FormData()
-      formData.append("file", selectedFile)
+      let response: Response
 
-      const response = await fetch("https://mfathur19-yolo-app.hf.space/detect", {
-        method: "POST",
-        body: formData,
-      })
+      if (endpoint === "huggingface") {
+        const formData = new FormData()
+        formData.append("file", selectedFile)
+
+        response = await fetch(ENDPOINTS.huggingface.url, {
+          method: "POST",
+          body: formData,
+        })
+      } else {
+        // SageMaker endpoint expects JSON with base64 image
+        const arrayBuffer = await selectedFile.arrayBuffer()
+        const base64 = btoa(
+          new Uint8Array(arrayBuffer).reduce(
+            (data, byte) => data + String.fromCharCode(byte),
+            ""
+          )
+        )
+
+        response = await fetch(ENDPOINTS.sagemaker.url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ image: base64 }),
+        })
+      }
 
       if (!response.ok) {
         throw new Error(`Server error: ${response.status}`)
@@ -257,11 +292,40 @@ export default function ObjectDetectionPage() {
               <p className="text-xs font-medium text-slate-500">Model</p>
               <p className="mt-1 font-semibold text-slate-900 dark:text-white">YOLOv8</p>
             </div>
-            <div className="rounded-xl bg-slate-100 dark:bg-slate-900 p-4">
-              <p className="text-xs font-medium text-slate-500">Endpoint</p>
-              <p className="mt-1 text-xs font-mono text-slate-600 dark:text-slate-400">
-                Hugging Face Spaces
-              </p>
+            <div>
+              <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                Endpoint
+              </label>
+              <div className="mt-2 space-y-2">
+                <label className="flex items-center gap-3 rounded-xl bg-slate-100 dark:bg-slate-900 p-3 cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
+                  <input
+                    type="radio"
+                    name="endpoint"
+                    value="huggingface"
+                    checked={endpoint === "huggingface"}
+                    onChange={() => setEndpoint("huggingface")}
+                    className="accent-blue-600"
+                  />
+                  <div>
+                    <p className="font-medium text-slate-900 dark:text-white text-sm">Hugging Face</p>
+                    <p className="text-xs text-slate-500">Free hosted endpoint</p>
+                  </div>
+                </label>
+                <label className="flex items-center gap-3 rounded-xl bg-slate-100 dark:bg-slate-900 p-3 cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
+                  <input
+                    type="radio"
+                    name="endpoint"
+                    value="sagemaker"
+                    checked={endpoint === "sagemaker"}
+                    onChange={() => setEndpoint("sagemaker")}
+                    className="accent-blue-600"
+                  />
+                  <div>
+                    <p className="font-medium text-slate-900 dark:text-white text-sm">AWS SageMaker</p>
+                    <p className="text-xs text-slate-500">Production endpoint</p>
+                  </div>
+                </label>
+              </div>
             </div>
             <Button
               onClick={detectObjects}
